@@ -4,7 +4,7 @@ import mysql.connector
 
 # Create Flask application
 app = Flask(__name__)
-CORS(app)  # This allows our future frontend to talk with our API
+CORS(app, resources={r"/api/*": {"origins": "http://localhost:5000"}}) 
 
 # Database connection function
 def get_db_connection():
@@ -61,6 +61,64 @@ def add_review():
         conn.close()
         
         return jsonify({"status": "success", "message": "Review added successfully"}), 201
+        
+    except mysql.connector.Error as err:
+        return jsonify({"error": f"Database error: {str(err)}"}), 500
+    
+@app.route('/api/movies/<int:movie_id>', methods=['GET'])
+def get_movie_details(movie_id):
+    try:
+        # Connect to database
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        # Get movie details
+        cursor.execute("""
+            SELECT m.*, 
+                   AVG(r.rating) as average_rating,
+                   COUNT(r.id) as review_count
+            FROM movies m
+            LEFT JOIN reviews r ON m.id = r.movie_id
+            WHERE m.id = %s
+            GROUP BY m.id
+        """, (movie_id,))
+        
+        movie = cursor.fetchone()
+        
+        if not movie:
+            return jsonify({"error": "Movie not found"}), 404
+        
+        # Clean up
+        cursor.close()
+        conn.close()
+        
+        return jsonify(movie)
+        
+    except mysql.connector.Error as err:
+        return jsonify({"error": f"Database error: {str(err)}"}), 500
+    
+@app.route('/api/movies/<int:movie_id>/reviews', methods=['GET'])
+def get_movie_reviews(movie_id):
+    try:
+        # Connect to database
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        # Get all reviews for the movie
+        cursor.execute("""
+            SELECT id, rating, comment, created_at
+            FROM reviews
+            WHERE movie_id = %s
+            ORDER BY created_at DESC
+        """, (movie_id,))
+        
+        reviews = cursor.fetchall()
+        
+        # Clean up
+        cursor.close()
+        conn.close()
+        
+        return jsonify(reviews)
         
     except mysql.connector.Error as err:
         return jsonify({"error": f"Database error: {str(err)}"}), 500
