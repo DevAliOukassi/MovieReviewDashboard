@@ -123,5 +123,36 @@ def get_movie_reviews(movie_id):
     except mysql.connector.Error as err:
         return jsonify({"error": f"Database error: {str(err)}"}), 500
 
+@app.route('/api/movies/<int:movie_id>/recommendations', methods=['GET'])
+def get_recommendations(movie_id):
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        # Get similar movies based on genre
+        cursor.execute("""
+            SELECT m2.*, 
+                   AVG(r.rating) as average_rating,
+                   COUNT(r.id) as review_count
+            FROM movies m1 
+            JOIN movies m2 ON m1.genre LIKE CONCAT('%', SUBSTRING_INDEX(m2.genre, ',', 1), '%')
+            LEFT JOIN reviews r ON m2.id = r.movie_id
+            WHERE m1.id = %s 
+            AND m2.id != %s
+            GROUP BY m2.id
+            ORDER BY average_rating DESC, review_count DESC
+            LIMIT 5
+        """, (movie_id, movie_id))
+        
+        recommendations = cursor.fetchall()
+        
+        cursor.close()
+        conn.close()
+        
+        return jsonify(recommendations)
+        
+    except mysql.connector.Error as err:
+        return jsonify({"error": f"Database error: {str(err)}"}), 500
+
 if __name__ == '__main__':
     app.run(debug=True)
